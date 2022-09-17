@@ -6,16 +6,16 @@
 #include <unistd.h>
 #include <stdio.h>
 #include <iostream>
+#include <vector>
+using namespace std;
 
-
-#define WIDTH 1920
-#define HEIGHT 1080
+#define WIDTH 1280
+#define HEIGHT 720
+bool useAllegro = false;
 bool done = false;
 bool showMenu = true;
 ALLEGRO_FONT* displayFont;
 ALLEGRO_DISPLAY* display;
-int** mainMatrix;
-int** ausMatrix;
 struct Configuration
 {
     int id;
@@ -28,11 +28,12 @@ struct Configuration
     int deadCount;
     int firstAliveCount;
     int secondAliveCount;
+    int maxIterations;
     Configuration()
     {
-        printf("New configuration created\n");
+
     }
-    Configuration(int id,float cellSize,int dim,int deadRate,int firstAliveRate,int secondAliveRate)
+    Configuration(const int &id,const float &cellSize,const int &dim,const int &deadRate,const int &firstAliveRate,const int &secondAliveRate,const int &maxIterations)
     {
         this->id = id;
         this->cellSize = cellSize;
@@ -44,9 +45,10 @@ struct Configuration
         this->deadCount = (this->deadRate * this->numberOfTiles) / 100;
         this->firstAliveCount = (this->firstAliveRate * this->numberOfTiles) / 100;
         this->secondAliveCount = (this->secondAliveRate * this->numberOfTiles) / 100;
+        this->maxIterations = maxIterations;
     }
 };
-int getValue(int** matrix,int x,int y,Configuration current)
+int getValue(const vector<vector<int>> &matrix,const int &x,const int &y,const Configuration &current)
 {
     int firstAlive = 0;
     int secondAlive = 0;
@@ -89,7 +91,7 @@ void initAllegro()
     al_set_new_window_title("Game of Life");
     al_set_app_name("Game of Life");
     al_set_new_display_flags(ALLEGRO_FULLSCREEN_WINDOW);
-    display = al_create_display(1920,1080);
+    display = al_create_display(WIDTH,HEIGHT);
     if(!display)
     {
         al_show_native_message_box(NULL,"Allegro Error","Header Error","Could not create display correcly","",0);
@@ -101,30 +103,43 @@ void initAllegro()
     al_init_ttf_addon();
     displayFont = al_load_font("RobotoCondensed-Bold.ttf",24,0);
 }
-void drawText(int currentDead,int currentFirstAliveCount,int currentSecondAliveCount,int time,int maxTime,Configuration current)
+void drawText(const int &currentDead,const int &currentIteration,const int &maxIterations,const int &currentFirstAliveCount,const int &currentSecondAliveCount,const int &time,const int &maxTime,const Configuration &current)
 {
     ALLEGRO_COLOR textColor = al_map_rgb(255,255,255);
     al_draw_textf(displayFont,textColor,(WIDTH / 2) + 100,10,0,"Number of tiles: %d",current.numberOfTiles);
-    al_draw_textf(displayFont,textColor,(WIDTH / 2) + 100,40,0,"Starting count of dead tiles: %d",current.deadCount);
-    al_draw_textf(displayFont,textColor,(WIDTH / 2) + 100,70,0,"Starting count of alive tiles with value 1: %d",current.firstAliveCount);
-    al_draw_textf(displayFont,textColor,(WIDTH / 2) + 100,100,0,"Starting count of alive tiles with value 2: %d",current.secondAliveCount);
-    al_draw_textf(displayFont,textColor,(WIDTH / 2) + 100,130,0,"Current number of dead tiles: %d",currentDead);
-    al_draw_textf(displayFont,textColor,(WIDTH / 2) + 100,160,0,"Curret number of alive tiles with value 1: %d",currentFirstAliveCount);
-    al_draw_textf(displayFont,textColor,(WIDTH / 2) + 100,190,0,"Current number of alive tiles with value 2: %d",currentSecondAliveCount);
-    al_draw_textf(displayFont,textColor,(WIDTH / 2) + 100,220,0,"Current Configuration: %d",current.id);
-    al_draw_textf(displayFont,textColor,(WIDTH / 2) + 100,250,0,"Current iteration: %d",time);
-    al_draw_textf(displayFont,textColor,(WIDTH / 2) + 100,280,0,"Max Iterations: %d",maxTime);
-    al_draw_text(displayFont,textColor,(WIDTH / 2) + 100,340,0,"Press ESC to exit the application");
-    al_draw_text(displayFont,textColor,(WIDTH / 2) + 100,370,0,"Press 1 to toggle the visibility of the menu");
+    int currentDistance = 10;
+    if(current.deadRate > 0 && current.firstAliveRate > 0 && current.secondAliveRate > 0)
+    {
+        al_draw_textf(displayFont,textColor,(WIDTH / 2) + 100,40,0,"Starting count of dead tiles: %d",current.deadCount);
+        al_draw_textf(displayFont,textColor,(WIDTH / 2) + 100,70,0,"Starting count of alive tiles with value 1: %d",current.firstAliveCount);
+        al_draw_textf(displayFont,textColor,(WIDTH / 2) + 100,100,0,"Starting count of alive tiles with value 2: %d",current.secondAliveCount);
+        currentDistance += 90;
+    }
+    al_draw_textf(displayFont,textColor,(WIDTH / 2) + 100,currentDistance + 30,0,"Current number of dead tiles: %d",currentDead);
+    al_draw_textf(displayFont,textColor,(WIDTH / 2) + 100,currentDistance + 60,0,"Curret number of alive tiles with value 1: %d",currentFirstAliveCount);
+    al_draw_textf(displayFont,textColor,(WIDTH / 2) + 100,currentDistance + 90,0,"Current number of alive tiles with value 2: %d",currentSecondAliveCount);
+    al_draw_textf(displayFont,textColor,(WIDTH / 2) + 100,currentDistance + 120,0,"Current Iteration: %d",currentIteration);
+    al_draw_textf(displayFont,textColor,(WIDTH / 2) + 100,currentDistance + 150,0,"Max Iterations: %d",maxIterations);
+    al_draw_textf(displayFont,textColor,(WIDTH / 2) + 100,currentDistance + 180,0,"Current Configuration: %d",current.id);
+    al_draw_text(displayFont,textColor,(WIDTH / 2) + 100,currentDistance + 240,0,"Press ESC to exit the application");
+    al_draw_text(displayFont,textColor,(WIDTH / 2) + 100,currentDistance + 270,0,"Press 1 to toggle the visibility of the menu");
 }
-void drawMatrix(int** matrix,Configuration current,int time,int maxTime)
+void drawMatrix(const vector<vector<int>> &matrix,const Configuration &current,const int &time,const int &maxTime)
 {
-    ALLEGRO_COLOR backgroundColor = al_map_rgb(0,0,0);
-    ALLEGRO_COLOR deadColor = al_map_rgb(2,2,38);
-    ALLEGRO_COLOR firstAlive = al_map_rgb(2,38,3);
-    ALLEGRO_COLOR secondAlive = al_map_rgb(120,5,20);
-    ALLEGRO_COLOR textColor = al_map_rgb(255,255,255);
-    al_clear_to_color(backgroundColor);
+    ALLEGRO_COLOR backgroundColor;
+    ALLEGRO_COLOR deadColor;
+    ALLEGRO_COLOR firstAlive;
+    ALLEGRO_COLOR secondAlive;
+    ALLEGRO_COLOR textColor;
+    if(useAllegro)
+    {
+        backgroundColor = al_map_rgb(0,0,0);
+        deadColor = al_map_rgb(2,2,38);
+        firstAlive = al_map_rgb(2,38,3);
+        secondAlive = al_map_rgb(120,5,20);
+        textColor = al_map_rgb(255,255,255);
+        al_clear_to_color(backgroundColor);
+    }
     float cellSize = current.cellSize;
     int currentDead = 0;
     int currentFirstAliveCount = 0;
@@ -152,11 +167,10 @@ void drawMatrix(int** matrix,Configuration current,int time,int maxTime)
                 currentColor = secondAlive;
                 currentSecondAliveCount++;
             }
-            al_draw_filled_rectangle(x,y,x + cellSize,y + cellSize,currentColor);
+                al_draw_filled_rectangle(x,y,x + cellSize,y + cellSize,currentColor);
         }
     }
-    if(showMenu)
-        drawText(currentDead,currentFirstAliveCount,currentSecondAliveCount,time,maxTime,current);
+    drawText(currentDead,time,maxTime,currentFirstAliveCount,currentSecondAliveCount,time,maxTime,current);
     al_flip_display();
 }
 void* handleInput(ALLEGRO_THREAD* thr,void* arg)
@@ -177,17 +191,13 @@ void* handleInput(ALLEGRO_THREAD* thr,void* arg)
         }
         else if(event.type == ALLEGRO_EVENT_DISPLAY_CLOSE)
           done = true;
-        else if(event.type == ALLEGRO_EVENT_DISPLAY_RESIZE)
-        {
-            //Avoid resizing
-        }
     }
     al_unregister_event_source(event_queue,al_get_keyboard_event_source());
     al_unregister_event_source(event_queue,al_get_display_event_source(display));
     al_destroy_event_queue(event_queue);
     return nullptr;
 }
-void generateMatrix(Configuration current)
+void generateMatrix(const Configuration &current,vector<vector<int>> &mainMatrix,vector<vector<int>> &ausMatrix)
 {
     srand(time(NULL));
     int currentDead = 0;
@@ -195,60 +205,58 @@ void generateMatrix(Configuration current)
     int currentSecondAliveCount = 0;
     for(unsigned i = 0;i < current.dim;i++)
     {
-        mainMatrix[i] = new int[current.dim];
-        ausMatrix[i] = new int[current.dim];
         for(unsigned j = 0;j < current.dim;j++)
         {
             int value = rand() % 3;
-            while(value == 0 && currentDead >= current.deadCount && (currentDead + currentFirstAliveCount + currentSecondAliveCount) < current.numberOfTiles || value == 1 && currentFirstAliveCount >= current.firstAliveCount && (currentDead + currentFirstAliveCount + currentSecondAliveCount) < current.numberOfTiles  || value == 2 && currentSecondAliveCount >= current.secondAliveCount && (currentDead + currentFirstAliveCount + currentSecondAliveCount) < current.numberOfTiles)
-               value = rand() % 3;
-            if(value == 0)
-               currentDead++;
-            else if(value == 1)
-               currentFirstAliveCount++;
-            else
-               currentSecondAliveCount++;
+            if(current.deadRate + current.firstAliveRate + current.secondAliveRate == 100)
+            {
+               while(value == 0 && currentDead >= current.deadCount || value == 1 && currentFirstAliveCount >= current.firstAliveCount || value == 2 && currentSecondAliveCount >= current.secondAliveCount)
+                   value = rand() % 3;
+               if(value == 0)
+                  currentDead++;
+               else if(value == 1)
+                  currentFirstAliveCount++;
+               else
+                  currentSecondAliveCount++;
+            }
             mainMatrix[i][j] = value;
         }
     }
 }
-void game(Configuration current)
+void game(const Configuration &current,vector<vector<int>> &mainMatrix,vector<vector<int>> &ausMatrix)
 {
     int time = 0;
-    int maxTime = 1000;
-
+    int maxTime = current.maxIterations;
     while(time < maxTime && !done)
     {
-        drawMatrix(mainMatrix,current,time,maxTime);
+        if(useAllegro)
+            drawMatrix(mainMatrix,current,time,maxTime);
         for(unsigned i = 0;i < current.dim;i++)
+        {
             for(unsigned j = 0;j < current.dim;j++)
+            {         
                 ausMatrix[i][j] = getValue(mainMatrix,i,j,current);
-        int** tmp = mainMatrix;
-        mainMatrix = ausMatrix;
-        ausMatrix = tmp;
+            }
+        }
+        for(unsigned i = 0;i < current.dim;i++)
+        {
+            for(unsigned j = 0;j < current.dim;j++)
+               mainMatrix[i][j] = ausMatrix[i][j];
+        }
         time++;
     }
-    printf("Completed\n");
     done = true;
-    for(unsigned i = 0;i < current.dim;i++)
-    {
-        delete[] mainMatrix[i];
-        delete[] ausMatrix[i];
-    }
-    delete[] mainMatrix;
-    delete[] ausMatrix;
 }
-void generateConfigured()
+void copy(vector<vector<int>> &first,vector<vector<int>> &second,const int &rows,const int &cols)
 {
-    for(unsigned i = 0;i < 1000;i++)
+    for(unsigned i = 0;i < rows;i++)
     {
-        mainMatrix[i] = new int[1000];
-        ausMatrix[i] = new int[1000];
-        for(unsigned j = 0;j < 1000;j++)
-        {
-            mainMatrix[i][j] = 0;
-        }
+        for(unsigned j = 0;j < cols;j++)
+            first[i][j] = second[i][j];
     }
+}
+void generateConfigured(vector<vector<int>> &mainMatrix)
+{
     for(unsigned j = 400;j < 600;j++)
     {
         for(unsigned i = 400;i < 430;i++)
@@ -264,42 +272,63 @@ void generateConfigured()
             mainMatrix[i][j] = 1;
     }
     for(unsigned j = 430;j < 570;j++)
-    {
         for(unsigned i = 430;i < 570;i++)
             mainMatrix[i][j] = 2;
-    }
-     
 }
 int main(int argc,char** argv)
 {
     //Creates default configurations
-    Configuration configurations[5];
-    configurations[0] = Configuration(1,8,100,30,40,30);
-    configurations[1] = Configuration(2,8,100,20,60,20);
-    configurations[2] = Configuration(3,0.8,1000,60,20,20);
-    configurations[3] = Configuration(4,0.8,1000,60,30,10);
-    configurations[4] = Configuration(5,0.8,1000,30,65,5);
+    Configuration configurations[7];
+    configurations[0] = Configuration(1,8,100,30,40,30,1000);
+    configurations[1] = Configuration(2,8,100,20,60,20,1000);
+    configurations[2] = Configuration(3,0.8,1000,60,20,20,100);
+    configurations[3] = Configuration(4,0.8,1000,60,30,10,100);
+    configurations[4] = Configuration(5,0.8,1000,30,65,5,100);
+    configurations[5] = Configuration(6,8,100,0,0,0,1000);
+    configurations[6] = Configuration(7,0.8,1000,0,0,0,100);
+    if(argc == 2 && strcmp(argv[1],"-a") == 0)
+        useAllegro = true;
     int value = 0;
-    while(value != 1 && value != 2 && value != 3 && value != 4 && value != 5)
+    time_t startTime,endTime;
+    while(value == 0 || value > 8)
     {
         for(Configuration current : configurations)
-           printf("Write %d to use configuration %d: \nNumber of rows: %d,Number of cols: %d,Dead Rate: %d,First Alive Rate: %d,Second Alive Rate: %d,Tile size: %f\n",current.id,current.id,current.dim,current.dim,current.deadRate,current.firstAliveRate,current.secondAliveRate,current.cellSize);
+        {
+            if(current.id == 7)
+            {
+                printf("Write 7 to use special configuration(square preset)\n");
+                continue;
+            }
+            if(current.deadRate > 0 || current.firstAliveRate > 0 || current.secondAliveRate > 0)
+                 printf("Write %d to use configuration %d: \nNumber of rows: %d,Number of cols: %d,Dead Rate: %d,First Alive Rate: %d,Second Alive Rate: %d,Tile size: %f\n",current.id,current.id,current.dim,current.dim,current.deadRate,current.firstAliveRate,current.secondAliveRate,current.cellSize);
+            else
+               printf("Write %d to use configuration %d: \nNumber of rows: %d,Number of cols: %d,Dead Rate: Not specified,First Alive Rate: Not specified,Second Alive Rate: Not specified,Tile size: %f\n",current.id,current.id,current.dim,current.dim,current.cellSize);
+        }
         printf("Write a number:");
         std::cin >> value;
     }
+    time(&startTime);
     Configuration current = configurations[value - 1];
     int dim  = current.dim;
-    mainMatrix = new int*[dim];
-    ausMatrix = new int*[dim];
-
+    vector<vector<int>> mainMatrix(dim,vector<int>(dim,0));
+    vector<vector<int>> ausMatrix(dim,vector<int>(dim,0));
     //Init input tread used to quit the application and toggle the visibility of the menu
-    initAllegro();
-    ALLEGRO_THREAD* inputThread = al_create_thread(handleInput,NULL);
-    al_start_thread(inputThread);
-
+    if(useAllegro)
+    {
+        initAllegro();
+        ALLEGRO_THREAD* inputThread = al_create_thread(handleInput,NULL);
+        al_start_thread(inputThread);
+    }
     //Inits the game
-    generateConfigured();
-    game(current);
-    al_destroy_display(display);
+    if(value == 7)
+        generateConfigured(mainMatrix);
+    else
+       generateMatrix(current,mainMatrix,ausMatrix);
+    game(current,mainMatrix,ausMatrix);
+    if(useAllegro)
+        al_destroy_display(display);
+    time(&endTime);
+    double executionTime = double(endTime - startTime);
+    printf("Execution time: %f\n",executionTime);
     return 0;
 }
