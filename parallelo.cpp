@@ -139,13 +139,13 @@ void* handleInput(ALLEGRO_THREAD* thr,void* arg)
         {
             if(event.type == ALLEGRO_EVENT_DISPLAY_CLOSE)
                 finished = true;
-        }
-        else if(event.type == ALLEGRO_EVENT_KEY_DOWN)
-        {
-            if(event.keyboard.keycode == ALLEGRO_KEY_ESCAPE)
-               finished = true;
-            else if(event.keyboard.keycode == ALLEGRO_KEY_1) 
-               showMenu = !showMenu;
+            else if(event.type == ALLEGRO_EVENT_KEY_DOWN)
+            {
+                if(event.keyboard.keycode == ALLEGRO_KEY_ESCAPE)
+                    finished = true;
+                else if(event.keyboard.keycode == ALLEGRO_KEY_1)
+                     showMenu = !showMenu;
+            }
         }
     }
     al_unregister_event_source(event_queue,al_get_display_event_source(display));
