@@ -16,6 +16,7 @@ using namespace std;
 ALLEGRO_DISPLAY* display = nullptr;
 ALLEGRO_FONT* displayFont = nullptr;
 bool finished = false;
+bool showConfigurations = false;
 bool useAllegro = false;
 bool showMenu = true;
 struct Configuration
@@ -128,18 +129,23 @@ void* handleInput(ALLEGRO_THREAD* thr,void* arg)
     ALLEGRO_EVENT_QUEUE* event_queue = al_create_event_queue();
     al_register_event_source(event_queue,al_get_display_event_source(display));
     al_register_event_source(event_queue,al_get_keyboard_event_source());
+    ALLEGRO_TIMEOUT timeout;
+    ALLEGRO_EVENT event;
+    al_init_timeout(&timeout,5);
     while(!finished)
     {
-        ALLEGRO_EVENT event;
-        al_wait_for_event(event_queue,&event);
-        if(event.type == ALLEGRO_EVENT_DISPLAY_CLOSE)
-            finished = true;
+        bool received = al_wait_for_event_until(event_queue,&event,&timeout);
+        if(received)
+        {
+            if(event.type == ALLEGRO_EVENT_DISPLAY_CLOSE)
+                finished = true;
+        }
         else if(event.type == ALLEGRO_EVENT_KEY_DOWN)
         {
             if(event.keyboard.keycode == ALLEGRO_KEY_ESCAPE)
-                finished = true;
-            else if(event.keyboard.keycode == ALLEGRO_KEY_1)
-                showMenu = !showMenu;
+               finished = true;
+            else if(event.keyboard.keycode == ALLEGRO_KEY_1) 
+               showMenu = !showMenu;
         }
     }
     al_unregister_event_source(event_queue,al_get_display_event_source(display));
@@ -319,7 +325,6 @@ void game(const int &world_rank,const int &world_size,const int &rows,const int 
     int lowerNeighbour = world_rank == world_size - 1 ? 0 : world_rank + 1;
     for(unsigned time = 0;time < maxTime && !finished;time++)
     {
-        MPI_Request drawRequests[localRowsWithGhost - 1];
         MPI_Request request;
         MPI_Status status;
         MPI_Isend(&mainMatrix[1][0],1,colType,upperNeighbour,0,MPI_COMM_WORLD,&request);
@@ -377,14 +382,20 @@ int main(int argc,char** argv)
     int world_rank,world_size;
     MPI_Comm_size(MPI_COMM_WORLD,&world_size);
     MPI_Comm_rank(MPI_COMM_WORLD,&world_rank);
-    if(argc == 2 && strcmp(argv[1],"-a") == 0)
-        useAllegro = true;
+    for(unsigned i = 0;i < argc;i++)
+    {
+        if(strcmp(argv[i],"-c") == 0)
+             showConfigurations = true;
+        if(strcmp(argv[i],"-a") == 0)
+             useAllegro = true;
+    }
     int configurationId,rows,cols,cellSize,deadRate,firstAliveRate,secondAliveRate,maxTime;
     double startTime,stopTime;
-    Configuration current;
+    Configuration current(6,8,100,0,0,0,1000);
     if(world_rank == 0)
     {
-        current = getConfiguration();
+        if(showConfigurations)
+             current = getConfiguration();
         startTime = MPI_Wtime();
         configurationId = current.id;
         rows = current.dim;

@@ -11,8 +11,9 @@ using namespace std;
 
 #define WIDTH 1280
 #define HEIGHT 720
+bool showConfigurations = false;
 bool useAllegro = false;
-bool done = false;
+bool finished = false;
 bool showMenu = true;
 ALLEGRO_FONT* displayFont;
 ALLEGRO_DISPLAY* display;
@@ -53,18 +54,14 @@ int getValue(const vector<vector<int>> &matrix,const int &x,const int &y,const C
     int firstAlive = 0;
     int secondAlive = 0;
     for(int i = x - 1;i <= x + 1;i++)
-    {
         for(int j = y - 1;j <= y + 1;j++)
-        {
-            if(i >= 0 && i < current.dim && j >= 0 && j < current.dim)
+            if((i != x || j != y) && i >= 0 && i < current.dim && j >= 0 && j < current.dim)
             {
                 if(matrix[i][j] == 1)
-                   firstAlive++;
-                if(matrix[i][j] == 2)
-                   secondAlive++;
+                    firstAlive++;
+                else if(matrix[i][j]== 2)
+                    secondAlive++;
             }
-        }
-    }
     int countAlive = firstAlive + secondAlive;
     int value = matrix[x][y];
     if(value == 0)
@@ -75,8 +72,7 @@ int getValue(const vector<vector<int>> &matrix,const int &x,const int &y,const C
     }
     else
     {
-        countAlive--;
-        if(countAlive >= 4 || countAlive < 2)
+        if(countAlive > 3 || countAlive < 2)
            return 0;
         return value;
     }
@@ -167,10 +163,11 @@ void drawMatrix(const vector<vector<int>> &matrix,const Configuration &current,c
                 currentColor = secondAlive;
                 currentSecondAliveCount++;
             }
-                al_draw_filled_rectangle(x,y,x + cellSize,y + cellSize,currentColor);
+            al_draw_filled_rectangle(x,y,x + cellSize,y + cellSize,currentColor);
         }
     }
-    drawText(currentDead,time,maxTime,currentFirstAliveCount,currentSecondAliveCount,time,maxTime,current);
+    if(showMenu)
+        drawText(currentDead,time,maxTime,currentFirstAliveCount,currentSecondAliveCount,time,maxTime,current);
     al_flip_display();
 }
 void* handleInput(ALLEGRO_THREAD* thr,void* arg)
@@ -178,19 +175,24 @@ void* handleInput(ALLEGRO_THREAD* thr,void* arg)
     ALLEGRO_EVENT_QUEUE* event_queue = al_create_event_queue();
     al_register_event_source(event_queue,al_get_keyboard_event_source());
     al_register_event_source(event_queue,al_get_display_event_source(display));
-    while(!done)
+    ALLEGRO_EVENT event;
+    ALLEGRO_TIMEOUT timeout;
+    al_init_timeout(&timeout,5);
+    while(!finished)
     {
-        ALLEGRO_EVENT event;
-        al_wait_for_event(event_queue,&event);
-        if(event.type == ALLEGRO_EVENT_KEY_DOWN)
+        bool received = al_wait_for_event_until(event_queue,&event,&timeout);
+        if(received)
         {
-            if(event.keyboard.keycode == ALLEGRO_KEY_ESCAPE)
-               done = true;
-            else if(event.keyboard.keycode == ALLEGRO_KEY_1)
-               showMenu = !showMenu;
+            if(event.type == ALLEGRO_EVENT_KEY_DOWN)
+            {
+                if(event.keyboard.keycode == ALLEGRO_KEY_ESCAPE)
+                   finished = true;
+                else if(event.keyboard.keycode == ALLEGRO_KEY_1)
+                   showMenu = !showMenu;
+            }
+            else if(event.type == ALLEGRO_EVENT_DISPLAY_CLOSE)
+               finished = true;
         }
-        else if(event.type == ALLEGRO_EVENT_DISPLAY_CLOSE)
-          done = true;
     }
     al_unregister_event_source(event_queue,al_get_keyboard_event_source());
     al_unregister_event_source(event_queue,al_get_display_event_source(display));
@@ -223,36 +225,24 @@ void generateMatrix(const Configuration &current,vector<vector<int>> &mainMatrix
         }
     }
 }
+void copy(vector<vector<int>> &first,vector<vector<int>> &second,const int &rows,const int &cols)
+{
+    for(unsigned i = 0;i < rows;i++)
+        for(unsigned j = 0;j < cols;j++)
+            first[i][j] = second[i][j];
+}
 void game(const Configuration &current,vector<vector<int>> &mainMatrix,vector<vector<int>> &ausMatrix)
 {
     int time = 0;
     int maxTime = current.maxIterations;
-    while(time < maxTime && !done)
+    for(unsigned time = 0;time < maxTime && !finished;time++)
     {
         if(useAllegro)
             drawMatrix(mainMatrix,current,time,maxTime);
         for(unsigned i = 0;i < current.dim;i++)
-        {
             for(unsigned j = 0;j < current.dim;j++)
-            {         
-                ausMatrix[i][j] = getValue(mainMatrix,i,j,current);
-            }
-        }
-        for(unsigned i = 0;i < current.dim;i++)
-        {
-            for(unsigned j = 0;j < current.dim;j++)
-               mainMatrix[i][j] = ausMatrix[i][j];
-        }
-        time++;
-    }
-    done = true;
-}
-void copy(vector<vector<int>> &first,vector<vector<int>> &second,const int &rows,const int &cols)
-{
-    for(unsigned i = 0;i < rows;i++)
-    {
-        for(unsigned j = 0;j < cols;j++)
-            first[i][j] = second[i][j];
+                 ausMatrix[i][j] = getValue(mainMatrix,i,j,current);
+        copy(mainMatrix,ausMatrix,current.dim,current.dim);
     }
 }
 void generateConfigured(vector<vector<int>> &mainMatrix)
@@ -275,9 +265,8 @@ void generateConfigured(vector<vector<int>> &mainMatrix)
         for(unsigned i = 430;i < 570;i++)
             mainMatrix[i][j] = 2;
 }
-int main(int argc,char** argv)
+Configuration getConfiguration()
 {
-    //Creates default configurations
     Configuration configurations[7];
     configurations[0] = Configuration(1,8,100,30,40,30,1000);
     configurations[1] = Configuration(2,8,100,20,60,20,1000);
@@ -286,47 +275,65 @@ int main(int argc,char** argv)
     configurations[4] = Configuration(5,0.8,1000,30,65,5,100);
     configurations[5] = Configuration(6,8,100,0,0,0,1000);
     configurations[6] = Configuration(7,0.8,1000,0,0,0,100);
-    if(argc == 2 && strcmp(argv[1],"-a") == 0)
-        useAllegro = true;
     int value = 0;
-    time_t startTime,endTime;
-    while(value == 0 || value > 8)
+    while(value == 0 || value > 7)
     {
         for(Configuration current : configurations)
         {
-            if(current.id == 7)
-            {
-                printf("Write 7 to use special configuration(square preset)\n");
-                continue;
-            }
-            if(current.deadRate > 0 || current.firstAliveRate > 0 || current.secondAliveRate > 0)
-                 printf("Write %d to use configuration %d: \nNumber of rows: %d,Number of cols: %d,Dead Rate: %d,First Alive Rate: %d,Second Alive Rate: %d,Tile size: %f\n",current.id,current.id,current.dim,current.dim,current.deadRate,current.firstAliveRate,current.secondAliveRate,current.cellSize);
+            if(current.id != 7 && current.deadRate > 0 && current.firstAliveRate > 0 && current.secondAliveRate > 0)
+                printf("Write %d to use configuration %d: \nNumber of rows: %d,Number of cols: %d,Dead Rate: %d,First Alive Rate: %d,Second Alive Rate: %d,Tile size: %f,Iterations: %d\n",current.id,current.id,current.dim,current.dim,current.deadRate,current.firstAliveRate,current.secondAliveRate,current.cellSize,current.maxIterations);
+            else if(current.id != 7)
+                printf("Write %d to use configuration %d: \nNumber of rows: %d,Number of cols: %d,Dead Rate: Not specified,First Alive Rate: Not specified,Second Alive Rate: Not specified,Tile size: %f,Iterations: %d\n",current.id,current.id,current.dim,current.dim,current.cellSize,current.maxIterations);
             else
-               printf("Write %d to use configuration %d: \nNumber of rows: %d,Number of cols: %d,Dead Rate: Not specified,First Alive Rate: Not specified,Second Alive Rate: Not specified,Tile size: %f\n",current.id,current.id,current.dim,current.dim,current.cellSize);
+                printf("Write 7 to use costum configuration(Square Preset)\n");
         }
         printf("Write a number:");
-        std::cin >> value;
+        cin >> value;
     }
+    Configuration result = configurations[value - 1];
+    return result;
+}
+int main(int argc,char** argv)
+{
+    for(unsigned i = 0;i < argc;i++)
+    {
+        if(strcmp(argv[i],"-c") == 0)
+            showConfigurations = true;
+        if(strcmp(argv[i],"-a") == 0)
+            useAllegro = true;
+    }
+    Configuration current(6,8,100,0,0,0,1000);
+    if(showConfigurations)
+        current = getConfiguration();
+    time_t startTime,endTime;
     time(&startTime);
-    Configuration current = configurations[value - 1];
+    if(!showConfigurations)
+        printf("When starting the application,use -c as a command line argument to choose a configuration\n");
+    if(!useAllegro)
+        printf("When starting the application,use -a as a command line argument to use allegro 5\n");
     int dim  = current.dim;
     vector<vector<int>> mainMatrix(dim,vector<int>(dim,0));
     vector<vector<int>> ausMatrix(dim,vector<int>(dim,0));
+    ALLEGRO_THREAD* inputThread;
     //Init input tread used to quit the application and toggle the visibility of the menu
     if(useAllegro)
     {
         initAllegro();
-        ALLEGRO_THREAD* inputThread = al_create_thread(handleInput,NULL);
+        inputThread = al_create_thread(handleInput,NULL);
         al_start_thread(inputThread);
     }
     //Inits the game
-    if(value == 7)
+    if(current.id == 7)
         generateConfigured(mainMatrix);
     else
        generateMatrix(current,mainMatrix,ausMatrix);
     game(current,mainMatrix,ausMatrix);
     if(useAllegro)
+    {
+        finished = true;
+        al_set_thread_should_stop(inputThread);
         al_destroy_display(display);
+    }
     time(&endTime);
     double executionTime = double(endTime - startTime);
     printf("Execution time: %f\n",executionTime);
